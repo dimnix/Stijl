@@ -26,6 +26,7 @@
 #define PRIORITY_TRECEIVEFROMMON 25
 #define PRIORITY_TSTARTROBOT 20
 #define PRIORITY_TCAMERA 21
+#define PRIORITY_TBATTERY 22
 
 /*
  * Some remarks:
@@ -123,6 +124,11 @@ void Tasks::Init() {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_task_create(&th_battery, "th_battery", 0, PRIORITY_TBATTERY, 0)) {
+        cerr << "Error task create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    
     cout << "Tasks created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -164,6 +170,10 @@ void Tasks::Run() {
         exit(EXIT_FAILURE);
     }
     if (err = rt_task_start(&th_move, (void(*)(void*)) & Tasks::MoveTask, this)) {
+        cerr << "Error task start: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_task_start(&th_battery, (void(*)(void*)) & Tasks::DisplayBattery, this)) {
         cerr << "Error task start: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -396,6 +406,15 @@ void Tasks::WriteInQueue(RT_QUEUE *queue, Message *msg) {
     }
 }
 
+void Tasks::DisplayBattery(void *arg) {
+    int batteryLevel;
+    while (1) {
+        rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+        batteryLevel = robot.Write(new MessageBattery());
+        cout << " battery level: " << batteryLevel << endl << flush;;
+        rt_mutex_release(&mutex_robot);
+    }
+}
 /**
  * Read a message from a given queue, block if empty
  * @param queue Queue identifier
