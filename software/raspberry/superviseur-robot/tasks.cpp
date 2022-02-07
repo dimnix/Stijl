@@ -407,10 +407,11 @@ void Tasks::WriteInQueue(RT_QUEUE *queue, Message *msg) {
 }
 
 void Tasks::DisplayBattery(void *arg) {
-    int batteryLevel;
+    Message* batteryLevel;
     while (1) {
         rt_mutex_acquire(&mutex_robot, TM_INFINITE);
         batteryLevel = robot.Write(new MessageBattery());
+        robot.Write(new MessageBattery(DMB_GET_VBAT));
         cout << " battery level: " << batteryLevel << endl << flush;;
         rt_mutex_release(&mutex_robot);
     }
