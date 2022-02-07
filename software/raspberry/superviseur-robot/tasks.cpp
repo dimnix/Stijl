@@ -26,7 +26,7 @@
 #define PRIORITY_TRECEIVEFROMMON 25
 #define PRIORITY_TSTARTROBOT 20
 #define PRIORITY_TCAMERA 21
-#define PRIORITY_TBATTERY 22
+#define PRIORITY_TBATTERY 20
 
 /*
  * Some remarks:
@@ -135,6 +135,10 @@ void Tasks::Init() {
     /* Message queues creation                                                            */
     /**************************************************************************************/
     if ((err = rt_queue_create(&q_messageToMon, "q_messageToMon", sizeof (Message*)*50, Q_UNLIMITED, Q_FIFO)) < 0) {
+        cerr << "Error msg queue create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+        if ((err = rt_queue_create(&q_messageToMon, "q_messageToRobot", sizeof (Message*)*50, Q_UNLIMITED, Q_FIFO)) < 0) {
         cerr << "Error msg queue create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -407,13 +411,32 @@ void Tasks::WriteInQueue(RT_QUEUE *queue, Message *msg) {
 }
 
 void Tasks::DisplayBattery(void *arg) {
-    Message* batteryLevel;
+    MessageBattery* batteryLevel;
+    int rs;
+    
+    cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
+    // Synchronization barrier (waiting that all tasks are starting)
+    rt_sem_p(&sem_barrier, TM_INFINITE);
+    
+    /**************************************************************************************/
+    /* The task starts here                                                               */
+    /**************************************************************************************/
+ rt_task_set_periodic(NULL, TM_NOW, 100000000);
     while (1) {
-        rt_mutex_acquire(&mutex_robot, TM_INFINITE);
-        batteryLevel = robot.Write(new MessageBattery());
-        robot.Write(new MessageBattery(DMB_GET_VBAT));
-        cout << " battery level: " << batteryLevel << endl << flush;;
-        rt_mutex_release(&mutex_robot);
+        rt_task_wait_period(NULL);
+        
+        rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+        rs = robotStarted;
+        rt_mutex_release(&mutex_robotStarted);
+        if (rs == 1){
+            rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+            batteryLevel =  (MessageBattery*) robot.Write(new Message(MESSAGE_ROBOT_BATTERY_GET));
+            rt_mutex_release(&mutex_robot);
+            WriteInQueue (&q_messageToRobot, batteryLevel);
+            cout << " battery level: " << batteryLevel->ToString() << endl << flush;
+            WriteInQueue (&q_messageToMon, batteryLevel);
+        }
+        
     }
 }
 /**
